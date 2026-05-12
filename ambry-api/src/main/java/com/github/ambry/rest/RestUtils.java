@@ -231,6 +231,12 @@ public class RestUtils {
      */
     public final static String TTL = "x-ambry-ttl";
     /**
+     * optional in request on PUT/POST; 'true' or 'false' case insensitive; default 'false'.
+     * When 'true', the upload response will include {@link #TTL} if the stored blob has a finite TTL.
+     * Header is omitted when the stored TTL is infinite, matching GET response semantics.
+     */
+    public final static String RETURN_TTL_ON_PUT = "x-ambry-return-ttl";
+    /**
      * optional in request; 'true' or 'false' case insensitive; default 'false'; indicates private content
      */
     public final static String PRIVATE = "x-ambry-private";

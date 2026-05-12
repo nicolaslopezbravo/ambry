@@ -305,6 +305,7 @@ class AmbrySecurityService implements SecurityService {
             responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
             responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+            maybeSetTtlOnUploadResponse(restRequest, responseChannel, blobInfo.getBlobProperties());
             break;
           case OPTIONS:
           case PUT:
@@ -313,6 +314,7 @@ class AmbrySecurityService implements SecurityService {
               responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
               responseChannel.setHeader(RestUtils.Headers.CREATION_TIME,
                   new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
+              maybeSetTtlOnUploadResponse(restRequest, responseChannel, blobInfo.getBlobProperties());
             }
             break;
           case DELETE:
@@ -448,6 +450,16 @@ class AmbrySecurityService implements SecurityService {
    * @param restResponseChannel the {@link RestResponseChannel} that is used for sending the response.
    * @throws RestServiceException if there are any problems setting the header.
    */
+  private void maybeSetTtlOnUploadResponse(RestRequest restRequest, RestResponseChannel responseChannel,
+      BlobProperties blobProperties) throws RestServiceException {
+    if (!RestUtils.getBooleanHeader(restRequest.getArgs(), RestUtils.Headers.RETURN_TTL_ON_PUT, false)) {
+      return;
+    }
+    if (blobProperties.getTimeToLiveInSeconds() != Utils.Infinite_Time) {
+      responseChannel.setHeader(RestUtils.Headers.TTL, Long.toString(blobProperties.getTimeToLiveInSeconds()));
+    }
+  }
+
   private void setBlobPropertiesHeaders(BlobProperties blobProperties, RestResponseChannel restResponseChannel)
       throws RestServiceException {
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());

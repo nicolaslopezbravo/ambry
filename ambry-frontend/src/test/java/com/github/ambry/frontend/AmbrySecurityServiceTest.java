@@ -460,6 +460,63 @@ public class AmbrySecurityServiceTest {
     }
   }
 
+  /**
+   * Tests that {@link RestUtils.Headers#TTL} is emitted on PUT/POST responses when the caller
+   * opts in via {@link RestUtils.Headers#RETURN_TTL_ON_PUT} and the stored TTL is finite, and
+   * is omitted when the TTL is infinite or when the caller did not opt in (backwards-compat).
+   */
+  @Test
+  public void processResponseTtlOnUploadTest() throws Exception {
+    long finiteTtl = 12345L;
+    BlobInfo finiteTtlInfo = new BlobInfo(
+        new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, finiteTtl, REF_ACCOUNT.getId(),
+            REF_CONTAINER.getId(), false, null, null, null), new byte[0]);
+    BlobInfo infiniteTtlInfo = new BlobInfo(
+        new BlobProperties(100, SERVICE_ID, OWNER_ID, "image/gif", false, Utils.Infinite_Time, REF_ACCOUNT.getId(),
+            REF_CONTAINER.getId(), false, null, null, null), new byte[0]);
+
+    // POST + opt-in + finite TTL -> header present
+    verifyUploadTtlHeader(RestMethod.POST, "/", finiteTtlInfo, true, Long.toString(finiteTtl));
+    // POST + opt-in + infinite TTL -> header absent (matches GET semantics)
+    verifyUploadTtlHeader(RestMethod.POST, "/", infiniteTtlInfo, true, null);
+    // POST + no opt-in -> header absent (backwards-compat)
+    verifyUploadTtlHeader(RestMethod.POST, "/", finiteTtlInfo, false, null);
+
+    // Named blob PUT + opt-in + finite TTL -> header present
+    String namedBlobUri = "/" + Operations.NAMED_BLOB + "/" + REF_ACCOUNT.getName() + "/"
+        + REF_CONTAINER.getName() + "/my-blob";
+    verifyUploadTtlHeader(RestMethod.PUT, namedBlobUri, finiteTtlInfo, true, Long.toString(finiteTtl));
+    // Named blob PUT + opt-in + infinite TTL -> header absent
+    verifyUploadTtlHeader(RestMethod.PUT, namedBlobUri, infiniteTtlInfo, true, null);
+    // Named blob PUT + no opt-in -> header absent (backwards-compat)
+    verifyUploadTtlHeader(RestMethod.PUT, namedBlobUri, finiteTtlInfo, false, null);
+  }
+
+  /**
+   * Helper for {@link #processResponseTtlOnUploadTest()}: runs processResponse with the given
+   * method/URI/BlobInfo, optionally setting {@link RestUtils.Headers#RETURN_TTL_ON_PUT}, and
+   * asserts the resulting {@link RestUtils.Headers#TTL} header matches the expected value
+   * ({@code null} means the header must be absent).
+   */
+  private void verifyUploadTtlHeader(RestMethod restMethod, String uri, BlobInfo blobInfo, boolean optIn,
+      String expectedTtlHeader) throws Exception {
+    JSONObject headers = null;
+    if (optIn) {
+      headers = new JSONObject();
+      headers.put(RestUtils.Headers.RETURN_TTL_ON_PUT, "true");
+    }
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    RestRequest restRequest = createRestRequest(restMethod, uri, headers);
+    securityService.processResponse(restRequest, restResponseChannel, blobInfo).get();
+    if (expectedTtlHeader == null) {
+      Assert.assertNull("TTL header should not be present in upload response",
+          restResponseChannel.getHeader(RestUtils.Headers.TTL));
+    } else {
+      Assert.assertEquals("TTL header should match stored TTL", expectedTtlHeader,
+          restResponseChannel.getHeader(RestUtils.Headers.TTL));
+    }
+  }
+
   @Test
   public void buildMetadataTest() throws Exception {
     String Chinese = "测试";

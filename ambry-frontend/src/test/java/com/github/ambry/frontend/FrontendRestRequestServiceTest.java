@@ -1996,6 +1996,53 @@ public class FrontendRestRequestServiceTest {
   }
 
   /**
+   * Integration-style test that verifies {@link RestUtils.Headers#TTL} is emitted on the POST
+   * response when the caller opts in via {@link RestUtils.Headers#RETURN_TTL_ON_PUT} and the
+   * stored TTL is finite, and is omitted when the TTL is infinite or when the caller did not
+   * opt in (backwards-compat). Exercises the full frontend stack including the real
+   * {@link AmbrySecurityService}.
+   */
+  @Test
+  public void postBlobWithReturnTtlOptInTest() throws Exception {
+    long finiteTtl = 7200L;
+    // opt-in + finite TTL -> header present
+    doPostAndVerifyTtlHeader(finiteTtl, true, Long.toString(finiteTtl));
+    // opt-in + infinite TTL -> header absent (matches GET semantics)
+    doPostAndVerifyTtlHeader(Utils.Infinite_Time, true, null);
+    // no opt-in -> header absent (backwards-compat)
+    doPostAndVerifyTtlHeader(finiteTtl, false, null);
+  }
+
+  /**
+   * Helper for {@link #postBlobWithReturnTtlOptInTest()}. Issues a POST through the full
+   * frontend stack and asserts the {@link RestUtils.Headers#TTL} response header matches
+   * {@code expectedTtlHeader} ({@code null} means the header must be absent).
+   */
+  private void doPostAndVerifyTtlHeader(long ttlInSecs, boolean optIn, String expectedTtlHeader) throws Exception {
+    ByteBuffer content = ByteBuffer.wrap(TestUtils.getRandomBytes(CONTENT_LENGTH));
+    List<ByteBuffer> contents = new LinkedList<>();
+    contents.add(content);
+    contents.add(null);
+    JSONObject headers = new JSONObject();
+    setAmbryHeadersForPut(headers, ttlInSecs, !refContainer.isCacheable(), "serviceId", "application/octet-stream",
+        "owner", refAccount.getName(), refContainer.getName(), null);
+    if (optIn) {
+      headers.put(RestUtils.Headers.RETURN_TTL_ON_PUT, "true");
+    }
+    RestRequest restRequest = createRestRequest(RestMethod.POST, "/", headers, contents);
+    MockRestResponseChannel restResponseChannel = new MockRestResponseChannel();
+    doOperation(restRequest, restResponseChannel);
+    assertEquals("Unexpected response status", ResponseStatus.Created, restResponseChannel.getStatus());
+    if (expectedTtlHeader == null) {
+      assertNull("TTL header should not be present in POST response",
+          restResponseChannel.getHeader(RestUtils.Headers.TTL));
+    } else {
+      assertEquals("TTL header should match stored TTL", expectedTtlHeader,
+          restResponseChannel.getHeader(RestUtils.Headers.TTL));
+    }
+  }
+
+  /**
    * Tests that container metrics are not generated when the target account is in the excluded list.
    * @throws Exception
    */
