@@ -271,7 +271,7 @@ public class FrontendMetrics {
   public final Histogram restRequestServiceShutdownTimeInMs;
 
   // Account
-  /** Serialized /accounts responses containing at least one nonempty migrationConfigs map. */
+  /** Account responses whose follow-up scan finds a nonempty migrationConfigs map. */
   public final Counter nonEmptyMigrationConfigsResponseCount;
   public final Counter unrecognizedServiceIdCount;
   public final Counter unrecognizedAccountNameCount;

@@ -39,11 +39,14 @@ import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.ThrowingBiConsumer;
 import com.github.ambry.utils.ThrowingConsumer;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.ConcurrentModificationException;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
@@ -53,6 +56,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
 
 /**
@@ -68,7 +72,7 @@ public class GetAccountsHandlerTest {
     metrics =
         new FrontendMetrics(new MetricRegistry(), new FrontendConfig(new VerifiableProperties(new Properties())));
     securityServiceFactory = new FrontendTestSecurityServiceFactory();
-    accountService = new InMemAccountService(false, true);
+    accountService = spy(new InMemAccountService(false, true));
     handler = new GetAccountsHandler(securityServiceFactory.getSecurityService(), accountService, metrics);
   }
 
@@ -287,6 +291,27 @@ public class GetAccountsHandlerTest {
         () -> sendRequestGetResponse(createRestRequest(null, null, null, Operations.ACCOUNTS),
             new MockRestResponseChannel()), null);
     assertEquals(0, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
+  }
+
+  @Test
+  public void migrationConfigsScanFailurePreservesResponseTest() throws Exception {
+    Account account = new AccountBuilder(accountService.createAndAddRandomAccount())
+        .migrationConfigs(Collections.singletonMap("DC-1", new MigrationConfig())).build();
+    accountService.updateAccounts(Collections.singleton(account));
+    List<Account> scannedAccounts = spy(new ArrayList<>(Collections.singleton(account)));
+    doThrow(new ConcurrentModificationException("injected scan failure")).when(scannedAccounts).spliterator();
+    when(accountService.getAllAccounts()).thenReturn(scannedAccounts);
+
+    RestRequest request = createRestRequest(null, null, null, Operations.ACCOUNTS);
+    try (ReadableStreamChannel response = sendRequestGetResponse(request, new MockRestResponseChannel());
+        RetainingAsyncWritableChannel output = new RetainingAsyncWritableChannel((int) response.getSize())) {
+      response.readInto(output, null).get();
+      assertEquals(Collections.singletonList(account),
+          AccountCollectionSerde.accountsFromInputStreamInJson(output.consumeContentAsInputStream()));
+      assertEquals(0, metrics.nonEmptyMigrationConfigsResponseCount.getCount());
+    }
+    verify(scannedAccounts).spliterator();
+    verify(accountService).getAllAccounts();
   }
 
   /**
