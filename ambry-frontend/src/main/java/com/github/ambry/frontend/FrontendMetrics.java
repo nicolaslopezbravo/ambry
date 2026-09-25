@@ -271,6 +271,8 @@ public class FrontendMetrics {
   public final Histogram restRequestServiceShutdownTimeInMs;
 
   // Account
+  /** Serialized /accounts responses containing at least one nonempty migrationConfigs map. */
+  public final Counter nonEmptyMigrationConfigsResponseCount;
   public final Counter unrecognizedServiceIdCount;
   public final Counter unrecognizedAccountNameCount;
   public final Counter unrecognizedContainerNameCount;
@@ -729,6 +731,8 @@ public class FrontendMetrics {
         metricRegistry.histogram(MetricRegistry.name(FrontendRestRequestService.class, "ShutdownTimeInMs"));
 
     // Account and container
+    nonEmptyMigrationConfigsResponseCount =
+        metricRegistry.counter(MetricRegistry.name(GetAccountsHandler.class, "NonEmptyMigrationConfigsResponseCount"));
     unrecognizedServiceIdCount =
         metricRegistry.counter(MetricRegistry.name(FrontendRestRequestService.class, "UnrecognizedServiceIdCount"));
     unrecognizedAccountNameCount =

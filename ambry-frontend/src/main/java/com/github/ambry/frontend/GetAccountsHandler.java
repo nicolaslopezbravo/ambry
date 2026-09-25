@@ -29,6 +29,7 @@ import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.GregorianCalendar;
@@ -129,7 +130,12 @@ class GetAccountsHandler {
         } else {
           boolean ignoreContainers =
               RestUtils.getBooleanHeader(restRequest.getArgs(), RestUtils.Headers.IGNORE_CONTAINERS, false);
-          serializedAccountsOrContainers = AccountCollectionSerde.serializeAccountsInJson(getAccounts(), ignoreContainers);
+          Collection<Account> accounts = new ArrayList<>(getAccounts());
+          serializedAccountsOrContainers = AccountCollectionSerde.serializeAccountsInJson(accounts, ignoreContainers);
+          if (accounts.stream()
+              .anyMatch(account -> account.getMigrationConfigs() != null && !account.getMigrationConfigs().isEmpty())) {
+            frontendMetrics.nonEmptyMigrationConfigsResponseCount.inc();
+          }
         }
         ReadableStreamChannel channel = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(
             serializedAccountsOrContainers));
